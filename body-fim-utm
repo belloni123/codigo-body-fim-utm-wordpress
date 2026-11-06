@@ -1,65 +1,49 @@
 <script>
-	
-// Obtém a URL atual
-var currentUrl = window.location.href;
+(() => {
+    const page = new URL(window.location.href);
+    const pagePath = page.pathname.replace(/^\/|\/$/g, '');
+    const referrer = document.referrer.replace(/^https?:\/\//, '');
+    const defaults = {
+        utm_source: referrer || 'Direto',
+        utm_medium: 'Organico',
+        utm_campaign: 'Direto',
+        utm_content: pagePath || 'Home',
+        utm_term: ''
+    };
 
-// Usa a API de URL do JavaScript para ler os parâmetros da URL
-var url = new URL(currentUrl);
+    const tracking = new URLSearchParams();
+    for (const [name, fallback] of Object.entries(defaults)) {
+        tracking.set(name, page.searchParams.get(name) || fallback);
+    }
 
-// Obtém o slug (path) da URL atual, removendo barras iniciais e finais
-var pagePath = url.pathname.replace(/^\/|\/$/g, '');
+    for (const link of document.querySelectorAll('a[href]')) {
+        const href = link.getAttribute('href');
+        if (!href.trim() || href.includes('#') || link.hasAttribute('popup')) continue;
 
-// Remove o prefixo "https://" ou "http://" do referrer, se existir
-var cleanReferrer = document.referrer ? document.referrer.replace(/^https?:\/\//, '') : '';
+        let destination;
+        try {
+            destination = new URL(href, document.baseURI);
+        } catch {
+            continue;
+        }
 
-// Define valores padrão para UTM caso eles não estejam presentes
-var utmSource = url.searchParams.get('utm_source') || cleanReferrer || 'Direto';
-var utmMedium = url.searchParams.get('utm_medium') || 'Organico';
-var utmCampaign = url.searchParams.get('utm_campaign') || 'Direto';
-var utmContent = url.searchParams.get('utm_content') || pagePath || 'Home';
-var utmTerm = url.searchParams.get('utm_term') || '';
+        // Mantém intactos tel:, mailto:, whatsapp: e outros protocolos de apps.
+        if (!['http:', 'https:'].includes(destination.protocol)) continue;
 
-// Percorre todos os links da página
-var links = document.querySelectorAll('a');
-for (var i = 0; i < links.length; i++) {
- 
-	// Verifica se o link atual não contém um atributo de popup
-    if (!links[i].hasAttribute('popup')) {
-   
-		// Obtém a URL de destino do link atual se não abrir um popup
-        var destinationUrl = links[i].href;
-		
-		// Verifica se a URL de destino não é um link âncora para a mesma página
-		if (!destinationUrl.includes('#')) {
- 
-			// Verifica se a URL de destino já possui algum parâmetro UTM
-            var hasUtmParams = destinationUrl.includes('utm_source') ||
-                               destinationUrl.includes('utm_medium') ||
-                               destinationUrl.includes('utm_campaign') ||
-                               destinationUrl.includes('utm_content') ||
-                               destinationUrl.includes('utm_term');
+        const host = destination.hostname.replace(/\.$/, '');
+        if (host === 'wa.me' || host === 'wa.link' ||
+            host === 'whatsapp.com' || host.endsWith('.whatsapp.com')) continue;
 
-            // Se não houver parâmetros UTM, adicione-os
-            if (!hasUtmParams) {
-                destinationUrl += (destinationUrl.indexOf('?') === -1 ? '?' : '&');
-                destinationUrl += 'utm_source=' + utmSource;
-                destinationUrl += '&utm_medium=' + utmMedium;
-                destinationUrl += '&utm_campaign=' + utmCampaign;
-                destinationUrl += '&utm_content=' + utmContent;
-                destinationUrl += '&utm_term=' + utmTerm;
+        if (Object.keys(defaults).some(name => destination.searchParams.has(name))) continue;
 
-				// Verifica se a URL de destino contém "pay.hotmart" ou "pay.kiwify"
-                if (destinationUrl.includes('pay.hotmart') || destinationUrl.includes('pay.kiwify')) {
-					
-					// Adiciona o parâmetro "sck" à URL de destino concatenando todos os parâmetros UTM
-                    var sckValue = utmSource + '-' + utmMedium + '-' + utmCampaign + '-' + utmContent + '-' + utmTerm;
-                    destinationUrl += '&sck=' + sckValue;
-                }
+        const params = new URLSearchParams(tracking);
+        if ((host === 'pay.hotmart.com' || host === 'pay.kiwify.com.br') &&
+            !destination.searchParams.has('sck')) {
+            params.set('sck', Array.from(tracking.values()).join('-'));
+        }
 
-				// Atribui a URL de destino ao link atual
-				links[i].href = destinationUrl;
-            }
-		}
-	}
-}
+        const separator = destination.search ? '&' : '?';
+        link.href = (destination.search ? destination.href : destination.href.replace(/\?$/, '')) + separator + params.toString();
+    }
+})();
 </script>
